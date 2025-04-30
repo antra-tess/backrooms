@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Simulations</title>
+    <style>
+        /* Consistent Hacker Theme */
+        :root {
+            --bg-color: #1a1a1a; --text-color: #00ff41; --border-color: #008000;
+            --accent-color: #00ff41; --link-color: #00ff41; --link-hover-color: #90ee90;
+            --table-header-bg: #222; --table-border: #008000; --table-row-hover: #2a2a2a;
+        }
+        body { font-family: "Courier New", Courier, monospace; background-color: var(--bg-color); color: var(--text-color); margin: 20px; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+        .top-nav a { color: var(--link-color); text-decoration: none; border: 1px solid var(--link-color); padding: 5px 10px; font-size: 0.9em; transition: background-color 0.2s ease, color 0.2s ease; }
+        .top-nav a:hover { background-color: var(--link-color); color: var(--bg-color); }
+        h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; margin-top: 0; color: var(--accent-color); }
+        h2 { color: var(--accent-color); margin-bottom: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px dashed var(--table-border); padding: 10px; text-align: left; }
+        th { background-color: var(--table-header-bg); color: var(--accent-color); }
+        tr:hover { background-color: var(--table-row-hover); }
+        a { color: var(--link-color); }
+        a:hover { text-decoration: underline; }
+        .flash-error, .flash-success { padding: 15px; margin-bottom: 20px; border: 1px solid; font-weight: bold; }
+        .flash-error { color: #ffdddd; background-color: #4d0000; border-color: #ff0000; }
+        .flash-success { color: #ddffdd; background-color: #003300; border-color: #00ff00; }
+        .no-sims { font-style: italic; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>&gt; My Past Simulations</h1>
+        <div>
+             <a href="{{ url_for('index') }}" style="margin-right: 10px;">&lt; Configure New</a>
+             {% if current_user.is_authenticated %}
+                 <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+             {% endif %}
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash-{{ category }}">[!] {{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if simulations %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Simulation ID</th>
+                    <th>Created</th>
+                    <th>Participants</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sim in simulations %}
+                    <tr>
+                        <td>{{ sim.id }}</td>
+                        <td>{{ sim.formatted_time }}</td>
+                        <td>{{ sim.participants }}</td>
+                        <td><a href="{{ url_for('view_simulation', simulation_id=sim.id) }}">View Details &amp; Log</a></td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="no-sims">No past simulations found for your user.</p>
+    {% endif %}
+
+</body>
+</html> 

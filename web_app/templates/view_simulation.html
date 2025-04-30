@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Simulation {{ config.id }}</title>
+    <style>
+        /* Consistent Hacker Theme */
+        :root {
+            --bg-color: #1a1a1a; --text-color: #00ff41; --border-color: #008000;
+            --accent-color: #00ff41; --link-color: #00ff41; --link-hover-color: #90ee90;
+            --section-bg: #222; --transcript-bg: #222;
+        }
+        body { font-family: "Courier New", Courier, monospace; background-color: var(--bg-color); color: var(--text-color); margin: 20px; }
+        .top-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+        .top-nav a { color: var(--link-color); text-decoration: none; border: 1px solid var(--link-color); padding: 5px 10px; font-size: 0.9em; transition: background-color 0.2s ease, color 0.2s ease; }
+        .top-nav a:hover { background-color: var(--link-color); color: var(--bg-color); }
+        h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; margin-top: 0; color: var(--accent-color); }
+        h2 { color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-top: 30px; }
+        pre {
+            background-color: var(--transcript-bg);
+            border: 1px dashed var(--border-color);
+            padding: 15px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border-radius: 0;
+            max-height: 60vh;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+        .config-details {
+            background-color: var(--section-bg);
+            border: 1px dashed var(--border-color);
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .config-details p { margin: 5px 0; }
+        .config-details strong { color: var(--accent-color); }
+        .participant-info { margin-left: 20px; margin-bottom: 10px; }
+        a { color: var(--link-color); }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>&gt; View Simulation</h1>
+        <div>
+             <a href="{{ url_for('list_simulations') }}" style="margin-right: 10px;">&lt; My Simulations</a>
+             <a href="{{ url_for('index') }}" style="margin-right: 10px;">Configure New</a>
+             {% if current_user.is_authenticated %}
+                 <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+             {% endif %}
+        </div>
+    </div>
+
+    <h2>Configuration</h2>
+    <div class="config-details">
+        <p><strong>ID:</strong> {{ config.id }}</p>
+        <p><strong>Created:</strong> {{ config.formatted_time }}</p>
+        <p><strong>Max Turns:</strong> {{ config.max_turns }}</p>
+        <p><strong>Turn Delay:</strong> {{ config.turn_delay_seconds }}s</p>
+        <p><strong>System Prompt:</strong> {{ config.system_prompt or 'None' }}</p>
+        <p><strong>Participants:</strong></p>
+        {% for p_config in config.participants_config %}
+            <div class="participant-info">
+                <p><strong>- Name:</strong> {{ p_config.name }}</p>
+                <p><strong>&nbsp;&nbsp;Model:</strong> {{ p_config.model }}</p>
+                <p><strong>&nbsp;&nbsp;Config:</strong> {{ p_config.model_config }}</p>
+                 <p><strong>&nbsp;&nbsp;Subjective History:</strong></p>
+                 <pre style="max-height: 100px; margin-left: 10px;">{{ p_config.subjective_history | map(attribute='content') | join('\n') or 'None' }}</pre>
+                 {# Displaying subjective history simply for now #}
+            </div>
+        {% else %}
+             <p>No participant configuration found.</p>
+        {% endfor %}
+    </div>
+
+    <h2>Transcript Log</h2>
+    <pre>{{ transcript }}</pre>
+
+</body>
+</html> 

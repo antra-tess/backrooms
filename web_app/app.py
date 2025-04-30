@@ -1,6 +1,6 @@
 import os
 import dotenv
-from flask import Flask, render_template, request, redirect, url_for, flash, Response, stream_with_context
+from flask import Flask, render_template, request, redirect, url_for, flash, Response, stream_with_context, abort
 from flask_login import (
     LoginManager, UserMixin, login_required, login_user, logout_user, current_user
 )
@@ -10,6 +10,7 @@ import uuid
 import json
 import time
 from typing import Dict, List
+import datetime
 
 # Add the parent directory to sys.path to find backrooms_engine
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -40,11 +41,14 @@ class User(UserMixin):
 
 # WARNING: Hardcoded user store - replace with database for production!
 # Generate a hash for the password 'password' (replace with a strong password)
-DEFAULT_PASSWORD = 'password' 
+DEFAULT_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'password') # Get from env or default
 users = {
     "1": User(id="1", username="admin", password_hash=generate_password_hash(DEFAULT_PASSWORD))
 }
-print(f"\n *** WARNING: Using hardcoded user 'admin' with password '{DEFAULT_PASSWORD}' *** \n")
+if DEFAULT_PASSWORD == 'password':
+    print(f"\n *** WARNING: Using default admin password 'password'. Set ADMIN_PASSWORD env var. *** \n")
+else:
+    print(f"\n Admin user 'admin' initialized. Use the password set in ADMIN_PASSWORD env var. \n")
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -90,6 +94,22 @@ MODEL_TO_CLASS = {
 simulation_configs: Dict[str, Dict] = {}
 # We don't store full results anymore, streaming directly
 
+# --- Constants & Setup ---
+SIMULATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'simulations'))
+
+# Ensure simulations directory exists
+if not os.path.exists(SIMULATIONS_DIR):
+    try:
+        os.makedirs(SIMULATIONS_DIR)
+        print(f"Created simulations directory: {SIMULATIONS_DIR}")
+    except OSError as e:
+        print(f"Error creating simulations directory {SIMULATIONS_DIR}: {e}", file=sys.stderr)
+        # Depending on severity, might want to exit or handle differently
+
+# --- Helper Function --- 
+def format_log_line(name: str, content: str) -> str:
+    return f"{name}: {content}\n"
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -132,7 +152,7 @@ def index():
 @app.route('/run', methods=['POST'])
 @login_required # Protect this route
 def run_simulation_setup():
-    """Handles form submission, stores config, redirects to stream view."""
+    """Handles form submission, saves config to file, redirects to stream view."""
     try:
         system_prompt = request.form.get('system_prompt')
         max_turns = int(request.form.get('max_turns', 10))
@@ -187,14 +207,26 @@ def run_simulation_setup():
         sim_id = str(uuid.uuid4())
         
         # Store the configuration needed to run the simulation later
-        simulation_configs[sim_id] = {
+        simulation_data = {
+            'id': sim_id,
+            'user_id': current_user.id, # Associate with current user
+            'timestamp': time.time(), # Store creation time
             'participants_config': participants_config,
             'max_turns': max_turns,
             'system_prompt': system_prompt,
             'turn_delay_seconds': turn_delay
         }
         
-        app.logger.info(f"Simulation config stored for ID: {sim_id}")
+        # Save configuration to JSON file
+        config_path = os.path.join(SIMULATIONS_DIR, f"{sim_id}.json")
+        try:
+            with open(config_path, 'w') as f:
+                json.dump(simulation_data, f, indent=4)
+            app.logger.info(f"Saved simulation config: {config_path}")
+        except IOError as e:
+             flash(f"Error saving simulation configuration: {e}", "error")
+             app.logger.error(f"Failed to save config {config_path}: {e}")
+             return redirect(url_for('index'))
 
         # Redirect to the page that will display the stream
         return redirect(url_for('stream_view', simulation_id=sim_id))
@@ -208,45 +240,62 @@ def run_simulation_setup():
 @login_required # Protect this route
 def stream_view(simulation_id):
     """Displays the page that will connect to the SSE stream."""
-    # Check if config exists, maybe pass some initial info?
-    if simulation_id not in simulation_configs:
-        flash("Error: Simulation ID not found or expired.", "error")
+    # Check if config file exists, otherwise it was likely invalid/not saved
+    config_path = os.path.join(SIMULATIONS_DIR, f"{simulation_id}.json")
+    if not os.path.exists(config_path):
+        app.logger.warning(f"Attempted to view stream for non-existent config: {simulation_id}")
+        flash("Error: Simulation configuration not found.", "error")
         return redirect(url_for('index'))
-    config = simulation_configs[simulation_id]
-    return render_template('stream.html', simulation_id=simulation_id, config=config)
+    # We don't need to load the full config here anymore, just render the page
+    return render_template('stream.html', simulation_id=simulation_id)
 
 @app.route('/stream/<simulation_id>')
 @login_required # Protect this route
 def stream(simulation_id):
-    """Server-Sent Events endpoint to stream simulation messages."""
-    config = simulation_configs.get(simulation_id)
+    """Server-Sent Events endpoint: loads config, runs engine, streams & logs messages."""
+    config_path = os.path.join(SIMULATIONS_DIR, f"{simulation_id}.json")
+    log_path = os.path.join(SIMULATIONS_DIR, f"{simulation_id}.log")
 
-    if not config:
-        # Return an empty response or an error event?
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        app.logger.error(f"Failed to load config {config_path}: {e}")
+        # Return an error event in the stream
         def error_stream():
-             yield f"event: error\ndata: Simulation config not found for ID {simulation_id}\n\n"
-        return Response(error_stream(), mimetype='text/event-stream')
+             error_data = json.dumps({"error": f"Failed to load simulation config: {e}"})
+             yield f"event: error\ndata: {error_data}\n\n"
+        return Response(stream_with_context(error_stream()), mimetype='text/event-stream')
+
+    # Check ownership (although redundant if file system perms were used)
+    if config.get('user_id') != current_user.id:
+        app.logger.warning(f"User {current_user.id} tried to stream simulation {simulation_id} owned by {config.get('user_id')}")
+        def error_stream():
+             error_data = json.dumps({"error": "Permission denied to stream this simulation."})
+             yield f"event: error\ndata: {error_data}\n\n"
+        return Response(stream_with_context(error_stream()), mimetype='text/event-stream')
 
     def generate_events():
+        log_file = None
         try:
-            app.logger.info(f"Starting event stream for simulation ID: {simulation_id}")
-            # --- Instantiate Participants --- 
+            log_file = open(log_path, 'w')
+            app.logger.info(f"Opened log file {log_path} for simulation {simulation_id}")
+
+            # --- Instantiate Participants (from loaded config) --- 
             participants: List[Participant] = []
             subjective_histories = {}
             for p_data in config['participants_config']:
                 model_name = p_data['model']
                 model_config = p_data['model_config']
                 name = p_data['name']
-                participant_class = MODEL_TO_CLASS[model_name] # Assumes valid model checked in setup
+                participant_class = MODEL_TO_CLASS.get(model_name)
+                if not participant_class:
+                    raise ValueError(f"Model '{model_name}' not found in mapping during stream generation.")
                 
                 try:
                     participants.append(participant_class(name=name, model_config=model_config))
                 except ValueError as ve:
-                     # Log and yield error event
-                     error_data = json.dumps({"error": f"Failed to init {name}: {ve}"})
-                     yield f"event: error\ndata: {error_data}\n\n"
-                     app.logger.error(f"Stream Error (Init): {ve} for {name}")
-                     return # Stop the stream
+                     raise ValueError(f"Failed to init participant {name}: {ve}") # Raise to be caught below
                      
                 if p_data['subjective_history']:
                     subjective_histories[name] = p_data['subjective_history']
@@ -257,45 +306,127 @@ def stream(simulation_id):
                 max_turns=config['max_turns'],
                 system_prompt=config['system_prompt'],
                 turn_delay_seconds=config['turn_delay_seconds']
-                # Add callback if needed later
             )
             
-            # Set subjective histories
             for name, history_data in subjective_histories.items():
                 engine.history.set_subjective_history(name, history_data)
             
-            # Yield initial message
-            start_data = json.dumps({"name": "System", "content": f"Simulation {simulation_id} starting..."})
+            start_content = f"Simulation {simulation_id} starting...\nSystem Prompt: {config['system_prompt'] or 'None'}\nMax Turns: {config['max_turns']}\n---\n"
+            start_data = json.dumps({"name": "System", "content": start_content})
             yield f"event: message\ndata: {start_data}\n\n"
-            time.sleep(0.1) # Small delay to ensure client connects
+            log_file.write(format_log_line("System", start_content))
+            time.sleep(0.1)
             
-            # Iterate through the generator
             for message in engine.run():
                 message_data = json.dumps({"name": message.participant_name, "content": message.content})
-                # Standard SSE message format
                 yield f"event: message\ndata: {message_data}\n\n"
-                # Optional: Add a small delay between messages for better UX?
-                # time.sleep(0.05)
-                
-            # Signal completion (optional, client can also detect stream close)
-            # end_data = json.dumps({"name": "System", "content": "Stream finished."}) 
-            # yield f"event: end_stream\ndata: {end_data}\n\n"
+                log_file.write(format_log_line(message.participant_name, message.content))
+            
             app.logger.info(f"Event stream finished normally for simulation ID: {simulation_id}")
+            log_file.write(format_log_line("System", "--- Simulation Ended Normally ---"))
 
         except Exception as e:
-             # Log and yield error event
-             error_data = json.dumps({"error": f"Stream failed: {e}"})
+             error_text = f"Stream/Run failed: {e}"
+             app.logger.error(f"Event stream failed for simulation ID: {simulation_id}: {error_text}", exc_info=True)
+             error_data = json.dumps({"error": error_text})
              yield f"event: error\ndata: {error_data}\n\n"
-             app.logger.error(f"Event stream failed for simulation ID: {simulation_id}", exc_info=True)
+             if log_file:
+                 try:
+                     log_file.write(format_log_line("System", f"--- ERROR: {error_text} ---"))
+                 except Exception as log_err:
+                     app.logger.error(f"Failed to write final error to log {log_path}: {log_err}")
         finally:
-            # Clean up the stored configuration once the stream ends (success or fail)
-            if simulation_id in simulation_configs:
-                del simulation_configs[simulation_id]
-                app.logger.info(f"Cleaned up config for simulation ID: {simulation_id}")
-            app.logger.info(f"Closing event stream for simulation ID: {simulation_id}")
+            if log_file:
+                try:
+                    log_file.close()
+                    app.logger.info(f"Closed log file {log_path}")
+                except IOError as e:
+                    app.logger.error(f"Error closing log file {log_path}: {e}")
+            # Don't delete config file anymore
+            app.logger.info(f"Closing event stream connection for simulation ID: {simulation_id}")
 
-    # Return the streaming response
     return Response(stream_with_context(generate_events()), mimetype='text/event-stream')
+
+# --- New Routes for Viewing Past Simulations ---
+
+@app.route('/simulations')
+@login_required
+def list_simulations():
+    """Lists simulations created by the current user."""
+    user_simulations = []
+    try:
+        for filename in os.listdir(SIMULATIONS_DIR):
+            if filename.endswith('.json'):
+                sim_id = filename[:-5] # Remove .json
+                config_path = os.path.join(SIMULATIONS_DIR, filename)
+                try:
+                    with open(config_path, 'r') as f:
+                        config = json.load(f)
+                    
+                    # Check ownership
+                    if config.get('user_id') == current_user.id:
+                        # Format timestamp nicely
+                        ts = config.get('timestamp', 0)
+                        dt_object = datetime.datetime.fromtimestamp(ts)
+                        formatted_time = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Get participant names
+                        p_names = [p.get('name', 'Unknown') for p in config.get('participants_config', [])]
+                        
+                        user_simulations.append({
+                            'id': sim_id,
+                            'timestamp': ts, # Keep original for sorting
+                            'formatted_time': formatted_time,
+                            'participants': ", ".join(p_names)
+                        })
+                except (IOError, json.JSONDecodeError, KeyError) as e:
+                    app.logger.warning(f"Could not load or parse simulation config {config_path}: {e}")
+                    continue # Skip corrupted/invalid files
+        
+        # Sort by timestamp, newest first
+        user_simulations.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+        
+    except OSError as e:
+        app.logger.error(f"Error listing simulations directory {SIMULATIONS_DIR}: {e}")
+        flash(f"Error accessing simulation history: {e}", "error")
+        
+    return render_template('simulations.html', simulations=user_simulations)
+
+@app.route('/simulation/<simulation_id>')
+@login_required
+def view_simulation(simulation_id):
+    """Displays the config and transcript log for a specific simulation."""
+    config_path = os.path.join(SIMULATIONS_DIR, f"{simulation_id}.json")
+    log_path = os.path.join(SIMULATIONS_DIR, f"{simulation_id}.log")
+    config = None
+    transcript = "(Log file not found or could not be read)"
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+    except (IOError, json.JSONDecodeError) as e:
+        app.logger.error(f"Failed to load config for view {config_path}: {e}")
+        abort(404, description="Simulation configuration not found or invalid.")
+
+    # Check ownership
+    if config.get('user_id') != current_user.id:
+        app.logger.warning(f"User {current_user.id} tried to view simulation {simulation_id} owned by {config.get('user_id')}")
+        abort(403, description="Permission denied to view this simulation.")
+        
+    # Try to read the log file
+    try:
+        with open(log_path, 'r') as f:
+            transcript = f.read()
+    except IOError as e:
+         app.logger.warning(f"Could not read log file {log_path}: {e}")
+         # transcript keeps its default error message
+
+    # Format timestamp for display
+    ts = config.get('timestamp', 0)
+    dt_object = datetime.datetime.fromtimestamp(ts)
+    config['formatted_time'] = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+         
+    return render_template('view_simulation.html', config=config, transcript=transcript)
 
 if __name__ == '__main__':
     app_dir = os.path.dirname(os.path.abspath(__file__))
