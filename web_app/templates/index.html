@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backrooms Engine Configuration</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a; /* Very dark grey */
+            --text-color: #00ff41; /* Bright green */
+            --border-color: #008000; /* Darker green */
+            --accent-color: #00ff41;
+            --button-bg: #008000;
+            --button-hover-bg: #00ff41;
+            --button-text: #1a1a1a;
+            --button-hover-text: #1a1a1a;
+            --input-bg: #2a2a2a;
+            --section-bg: #222;
+            --flash-error-bg: #4d0000;
+            --flash-error-border: #ff0000;
+            --flash-error-text: #ffdddd;
+            --flash-success-bg: #003300;
+            --flash-success-border: #00ff00;
+            --flash-success-text: #ddffdd;
+            --link-color: #00ff41;
+        }
+
+        body {
+            font-family: "Courier New", Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 20px;
+        }
+        .top-nav { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 20px; 
+            padding-bottom: 10px; 
+            border-bottom: 1px solid var(--border-color); 
+        }
+        .top-nav a { 
+            color: var(--link-color); 
+            text-decoration: none; 
+            border: 1px solid var(--link-color);
+            padding: 5px 10px;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease, color 0.2s ease;
+         }
+         .top-nav a:hover { 
+             background-color: var(--link-color);
+             color: var(--bg-color);
+         }
+        h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; margin-top: 0; }
+        h2 { color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--accent-color); }
+        input[type="text"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0; /* Sharper edges */
+            font-family: inherit;
+        }
+        input:focus, select:focus, textarea:focus {
+             outline: 1px solid var(--accent-color);
+             box-shadow: 0 0 5px var(--accent-color);
+        }
+        textarea { min-height: 80px; }
+        hr { border: 0; border-top: 1px solid var(--border-color); margin: 20px 0; }
+        
+        .participant-section { 
+            border: 1px dashed var(--border-color); /* Dashed border */
+            padding: 15px; 
+            margin-bottom: 15px; 
+            background-color: var(--section-bg);
+            border-radius: 0;
+        }
+        .participant-header {
+             font-size: 1.1em; 
+             margin-bottom: 15px; 
+             color: var(--accent-color); 
+             border-bottom: 1px solid var(--border-color);
+             padding-bottom: 5px;
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+         }
+         
+        button, .button {
+            padding: 10px 15px;
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: 1px solid var(--text-color);
+            border-radius: 0;
+            cursor: pointer;
+            margin-right: 5px;
+            font-family: inherit;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        button:hover, .button:hover {
+            background-color: var(--button-hover-bg);
+            color: var(--button-hover-text);
+            border-color: var(--button-hover-bg);
+        }
+        
+        .remove-btn { 
+             background-color: transparent;
+             color: #ff4151; /* Reddish pink */
+             border: 1px solid #ff4151;
+             padding: 5px 10px;
+             font-size: 0.9em;
+        }
+        .remove-btn:hover { 
+            background-color: #ff4151;
+            color: var(--bg-color);
+            border-color: #ff4151;
+        }
+        
+        /* Flash Messages */
+        .flash-error, .flash-success {
+             padding: 15px;
+             margin-bottom: 20px;
+             border: 1px solid;
+             font-weight: bold;
+         }
+        .flash-error {
+            color: var(--flash-error-text);
+            background-color: var(--flash-error-bg);
+            border-color: var(--flash-error-border);
+        }
+        .flash-success {
+            color: var(--flash-success-text);
+            background-color: var(--flash-success-bg);
+            border-color: var(--flash-success-border);
+        }
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>&gt; Configure Backrooms Simulation</h1>
+        {% if current_user.is_authenticated %}
+            <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+        {% endif %}
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash-{{ category }}">[!] {{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form id="simulation-form" action="{{ url_for('run_simulation_setup') }}" method="post">
+        
+        <div class="form-group">
+            <label for="system_prompt">System Prompt (Optional):</label>
+            <textarea id="system_prompt" name="system_prompt" placeholder="// Enter common instructions here..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="max_turns">Max Turns:</label>
+            <input type="number" id="max_turns" name="max_turns" value="6" min="1" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="turn_delay">Turn Delay (seconds):</label>
+            <input type="number" id="turn_delay" name="turn_delay" value="0" min="0" step="0.1">
+        </div>
+
+        <hr>
+        <h2>&gt; Participants</h2>
+        <div id="participants-container">
+            <!-- Participant sections dynamically added -->
+        </div>
+        <button type="button" id="add-participant">+ Add Participant</button>
+
+        <hr>
+        <button type="submit">Run Simulation &gt;</button>
+    </form>
+
+    <script>
+        const participantsContainer = document.getElementById('participants-container');
+        const addParticipantButton = document.getElementById('add-participant');
+        const simulationForm = document.getElementById('simulation-form');
+        const modelNames = JSON.parse('{{ model_names | tojson | safe }}'); 
+        const localStorageKey = 'backroomsSimSettings';
+        let participantIndex = 0; // Keep track of unique indices
+
+        // Function to add a participant section (optionally with data)
+        function addParticipant(data = null) {
+            const index = participantIndex++; // Use unique index for IDs
+            const div = document.createElement('div');
+            div.classList.add('participant-section');
+            div.dataset.index = index; // Store index for saving later
+            div.id = `participant-${index}`;
+
+            let modelOptions = '';
+            modelNames.forEach(name => {
+                // Select the model if data is provided
+                const selected = (data && data.model === name) ? 'selected' : '';
+                modelOptions += `<option value="${name}" ${selected}>${name}</option>`;
+            });
+            
+            div.innerHTML = `
+                <div class="participant-header">
+                    <span>Participant <span class="participant-number"></span></span> 
+                    <button type="button" class="remove-btn" onclick="removeParticipant(${index})">X Remove</button>
+                </div>
+                <div class="form-group">
+                    <label for="p-name-${index}">Name:</label>
+                    <input type="text" id="p-name-${index}" name="participants[${index}][name]" value="${data ? data.name : `Agent_${index + 1}`}" required>
+                </div>
+                <div class="form-group">
+                    <label for="p-model-${index}">Model:</label>
+                    <select id="p-model-${index}" name="participants[${index}][model]" required>
+                        ${modelOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="p-max_tokens-${index}">Max Tokens:</label>
+                    <input type="number" id="p-max_tokens-${index}" name="participants[${index}][max_tokens]" value="${data ? data.max_tokens : 300}" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="p-temperature-${index}">Temperature:</label>
+                    <input type="number" id="p-temperature-${index}" name="participants[${index}][temperature]" value="${data ? data.temperature : 1.0}" min="0" max="2" step="0.1">
+                </div>
+                 <div class="form-group">
+                    <label for="p-subjective-${index}">Subjective History (Optional, one entry per line, format: "Role: Content"):</label>
+                    <textarea id="p-subjective-${index}" name="participants[${index}][subjective_history]" placeholder="System: Your secret objective is X...\nAgent_1: Remember context Y...">${data ? data.subjective_history : ''}</textarea>
+                </div>
+            `;
+            participantsContainer.appendChild(div);
+            updateParticipantNumbers();
+        }
+
+        function removeParticipant(index) {
+            const participantDiv = document.getElementById(`participant-${index}`);
+            if (participantDiv) {
+                participantDiv.remove();
+                updateParticipantNumbers(); // Renumber remaining participants
+            }
+        }
+
+        function updateParticipantNumbers() {
+            const sections = participantsContainer.querySelectorAll('.participant-section');
+            sections.forEach((section, i) => {
+                 const numberSpan = section.querySelector('.participant-number');
+                 if(numberSpan) numberSpan.textContent = i + 1;
+                 // Update input names to be sequential for form submission
+                 section.querySelectorAll('input, select, textarea').forEach(input => {
+                     if (input.name) {
+                        input.name = input.name.replace(/participants\[\d+\]/, `participants[${i}]`);
+                     }
+                 });
+            });
+        }
+
+        function saveSettings() {
+             console.log("Saving settings to localStorage...");
+             const settings = {
+                 system_prompt: document.getElementById('system_prompt').value,
+                 max_turns: document.getElementById('max_turns').value,
+                 turn_delay: document.getElementById('turn_delay').value,
+                 participants: []
+             };
+
+             const participantSections = participantsContainer.querySelectorAll('.participant-section');
+             participantSections.forEach(section => {
+                 const index = section.dataset.index; // Use the original unique index for IDs
+                 const participantData = {
+                     name: section.querySelector(`#p-name-${index}`).value,
+                     model: section.querySelector(`#p-model-${index}`).value,
+                     max_tokens: section.querySelector(`#p-max_tokens-${index}`).value,
+                     temperature: section.querySelector(`#p-temperature-${index}`).value,
+                     subjective_history: section.querySelector(`#p-subjective-${index}`).value,
+                 };
+                 settings.participants.push(participantData);
+             });
+
+             try {
+                 localStorage.setItem(localStorageKey, JSON.stringify(settings));
+                 console.log("Settings saved:", settings);
+             } catch (e) {
+                 console.error("Error saving settings to localStorage:", e);
+             }
+        }
+
+        function loadSettings() {
+            console.log("Loading settings from localStorage...");
+            try {
+                const savedSettings = localStorage.getItem(localStorageKey);
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    console.log("Found saved settings:", settings);
+
+                    document.getElementById('system_prompt').value = settings.system_prompt || '';
+                    document.getElementById('max_turns').value = settings.max_turns || 6;
+                    document.getElementById('turn_delay').value = settings.turn_delay || 0;
+
+                    // Clear any existing participant sections before loading saved ones
+                    participantsContainer.innerHTML = ''; 
+                    participantIndex = 0; // Reset index before adding saved participants
+
+                    if (settings.participants && settings.participants.length > 0) {
+                        settings.participants.forEach(pData => {
+                            addParticipant(pData); // Add participant with saved data
+                        });
+                    } else {
+                         // If no saved participants, add default ones
+                         addParticipant();
+                         addParticipant();
+                    }
+                    updateParticipantNumbers(); // Ensure numbering and input names are correct after load
+                } else {
+                    console.log("No saved settings found. Loading defaults.");
+                    // If no saved settings, add default participants
+                     participantsContainer.innerHTML = '';
+                     participantIndex = 0;
+                     addParticipant();
+                     addParticipant();
+                }
+            } catch (e) {
+                console.error("Error loading settings from localStorage:", e);
+                // Load defaults if loading fails
+                 participantsContainer.innerHTML = '';
+                 participantIndex = 0;
+                 addParticipant();
+                 addParticipant();
+            }
+        }
+        
+        // Add participant button listener
+        addParticipantButton.addEventListener('click', () => addParticipant());
+
+        // Save settings just before form submission
+        simulationForm.addEventListener('submit', saveSettings);
+
+        // Load settings when the page is ready
+        document.addEventListener('DOMContentLoaded', loadSettings);
+
+    </script>
+</body>
+</html> 

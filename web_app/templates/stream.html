@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation Stream</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #00ff41;
+            --border-color: #008000;
+            --accent-color: #00ff41;
+            --link-color: #00ff41;
+            --link-hover-color: #90ee90; /* Lighter green */
+            --transcript-bg: #222;
+            --status-color: #aaa;
+            --error-color: #ff4151;
+            --system-color: #aaa;
+        }
+
+        body {
+            font-family: "Courier New", Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 20px;
+        }
+        .top-nav { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 20px; 
+            padding-bottom: 10px; 
+            border-bottom: 1px solid var(--border-color); 
+        }
+        .top-nav a { 
+             color: var(--link-color); 
+             text-decoration: none; 
+             border: 1px solid var(--link-color);
+             padding: 5px 10px;
+             font-size: 0.9em;
+             transition: background-color 0.2s ease, color 0.2s ease;
+         }
+         .top-nav a:hover { 
+             background-color: var(--link-color);
+             color: var(--bg-color);
+         }
+        h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; margin-top: 0; color: var(--accent-color); }
+        p { color: var(--status-color); }
+        #transcript {
+            background-color: var(--transcript-bg);
+            border: 1px dashed var(--border-color);
+            padding: 15px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border-radius: 0;
+            min-height: 300px;
+            max-height: 75vh;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            font-size: 0.95em; /* Slightly smaller for more text */
+        }
+        .message-line { margin-bottom: 8px; line-height: 1.4; }
+        .participant-name { font-weight: bold; }
+        /* System messages have different styling */
+        .system-message .participant-name {
+            color: var(--system-color);
+            font-style: italic;
+        }
+        .system-message span:last-child { /* Content of system message */
+             color: var(--system-color);
+             font-style: italic;
+        }
+        .error-message {
+             color: var(--error-color);
+             font-weight: bold;
+         }
+         .error-message .participant-name {
+             color: var(--error-color);
+         }
+         
+        #status {
+             margin-top: 10px; 
+             font-style: italic; 
+             color: var(--status-color);
+             padding: 5px; 
+             border: 1px dotted var(--border-color);
+             display: inline-block; /* Fit content */
+         }
+        .bottom-nav { margin-top: 20px; }
+        .bottom-nav a {
+             color: var(--link-color); text-decoration: none; font-weight: bold;
+             border: 1px solid var(--link-color); padding: 5px 10px;
+             display: inline-block; transition: background-color 0.2s ease, color 0.2s ease;
+         }
+        .bottom-nav a:hover {
+             text-decoration: none; background-color: var(--link-color); color: var(--bg-color);
+         }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <h1>&gt; Simulation Stream</h1>
+        {% if current_user.is_authenticated %}
+            <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+        {% endif %}
+    </div>
+
+    <p>(ID: {{ simulation_id }})</p>
+
+    <div id="transcript"></div>
+    <div id="status">Connecting to stream...</div>
+    
+    <div class="bottom-nav">
+        <a href="{{ url_for('index') }}">&lt; Configure New Simulation</a>
+    </div>
+
+    <script>
+        const transcriptDiv = document.getElementById('transcript');
+        const statusDiv = document.getElementById('status');
+        const simulationId = "{{ simulation_id }}";
+        const streamUrl = `/stream/${simulationId}`;
+
+        console.log(`Connecting to SSE stream: ${streamUrl}`);
+        const eventSource = new EventSource(streamUrl);
+
+        eventSource.onopen = function() {
+            statusDiv.textContent = "[STREAM CONNECTED] Waiting for messages...";
+            console.log("SSE Connection Opened");
+        };
+
+        eventSource.addEventListener('message', function(event) {
+            console.log("Raw data received:", event.data);
+            try {
+                const messageData = JSON.parse(event.data);
+                const messageLine = document.createElement('div');
+                messageLine.classList.add('message-line');
+
+                const nameSpan = document.createElement('span');
+                nameSpan.classList.add('participant-name');
+                nameSpan.textContent = messageData.name + ": ";
+                
+                const contentSpan = document.createElement('span');
+                contentSpan.textContent = messageData.content;
+
+                if (messageData.name === "System") {
+                    messageLine.classList.add('system-message');
+                    // Check for specific system messages
+                    if (messageData.content.startsWith("ERROR:")) {
+                        messageLine.classList.add('error-message');
+                        statusDiv.textContent = "[STREAM HALTED BY ERROR]";
+                        statusDiv.style.color = "var(--error-color)";
+                        eventSource.close();
+                    } else if (messageData.content.startsWith("END:") || messageData.content.startsWith("STOP:")){
+                         statusDiv.textContent = "[STREAM CLOSED]";
+                         eventSource.close();
+                    }
+                }
+
+                messageLine.appendChild(nameSpan);
+                messageLine.appendChild(contentSpan);
+                transcriptDiv.appendChild(messageLine);
+
+                transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                
+                if (statusDiv.textContent.includes("Waiting")) {
+                     statusDiv.textContent = "[STREAM ACTIVE]";
+                }
+
+            } catch (e) {
+                console.error("Failed to parse message data:", event.data, e);
+                const errorLine = document.createElement('div');
+                errorLine.textContent = `[RAW DATA - PARSE ERROR]: ${event.data}`;
+                transcriptDiv.appendChild(errorLine);
+                transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+            }
+        });
+        
+        eventSource.addEventListener('error', function(event) {
+             console.error("Server sent error event:", event);
+             statusDiv.textContent = "[STREAM ERROR] Server error occurred.";
+             statusDiv.style.color = "var(--error-color)";
+             
+             const errorLine = document.createElement('div');
+             errorLine.classList.add('message-line', 'error-message');
+             try {
+                 // Attempt to parse server error message if available
+                 const errorData = JSON.parse(event.data);
+                 errorLine.innerHTML = `<span>SERVER ERROR:</span> <span>${errorData.error || 'Unknown error'}</span>`;
+             } catch (e) {
+                  errorLine.innerHTML = `<span>SERVER ERROR (unparsed):</span> <span>${event.data || 'No data received'}</span>`;
+             }
+             transcriptDiv.appendChild(errorLine);
+             transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+             
+             eventSource.close();
+        });
+
+        eventSource.onerror = function(err) {
+            // This handler often triggers when the connection closes normally too.
+            // We rely on the server sending specific messages (END, STOP, ERROR) 
+            // or the custom 'error' event to determine the final state.
+            if (eventSource.readyState == EventSource.CLOSED) {
+                // Only update status if it wasn't already set by a specific end message
+                if (!statusDiv.textContent.includes("CLOSED") && !statusDiv.textContent.includes("HALTED") && !statusDiv.textContent.includes("ERROR")) {
+                    statusDiv.textContent = "[STREAM CLOSED]";
+                }
+                console.log("SSE Connection Closed.");
+            } else {
+                // This indicates a potential network issue
+                if (!statusDiv.textContent.includes("ERROR")) { // Avoid overwriting specific server error
+                    statusDiv.textContent = "[STREAM CONNECTION ERROR]";
+                    statusDiv.style.color = "var(--error-color)";
+                }
+                console.error("SSE Connection Error:", err);
+                eventSource.close();
+            }
+        };
+
+    </script>
+</body>
+</html> 

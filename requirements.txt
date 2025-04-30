@@ -1,0 +1,5 @@
+openai>=1.0.0
+anthropic>=0.15.0
+python-dotenv>=0.10.0 # For loading .env files
+Flask>=2.0.0 # For web frontend
+Flask-Login>=0.6.0 # For user authentication 

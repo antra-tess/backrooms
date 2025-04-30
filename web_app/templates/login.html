@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Backrooms Engine</title>
+    <style>
+        /* Use same theme variables and base styles as index.html */
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #00ff41;
+            --border-color: #008000;
+            --accent-color: #00ff41;
+            --button-bg: #008000;
+            --button-hover-bg: #00ff41;
+            --button-text: #1a1a1a;
+            --button-hover-text: #1a1a1a;
+            --input-bg: #2a2a2a;
+            --section-bg: #222; /* Use for form background */
+            --flash-error-bg: #4d0000;
+            --flash-error-border: #ff0000;
+            --flash-error-text: #ffdddd;
+            --flash-success-bg: #003300;
+            --flash-success-border: #00ff00;
+            --flash-success-text: #ddffdd;
+        }
+        body {
+            font-family: "Courier New", Courier, monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center login form */
+            padding-top: 5%;
+        }
+        h1 { color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 20px;}
+        .form-group { margin-bottom: 15px; width: 100%;}
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--accent-color); }
+        input[type="text"], input[type="password"], input[type="checkbox"] {
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0;
+            font-family: inherit;
+        }
+        input[type="text"], input[type="password"] { width: 100%; }
+        input[type="checkbox"] { width: auto; margin-right: 5px; accent-color: var(--accent-color); }
+        input:focus { outline: 1px solid var(--accent-color); box-shadow: 0 0 5px var(--accent-color); }
+        button { 
+            padding: 10px 15px; background-color: var(--button-bg); color: var(--button-text);
+            border: 1px solid var(--text-color); border-radius: 0; cursor: pointer;
+            font-family: inherit; font-weight: bold; text-transform: uppercase;
+            transition: background-color 0.2s ease, color 0.2s ease; width: 100%;
+        }
+        button:hover { background-color: var(--button-hover-bg); color: var(--button-hover-text); border-color: var(--button-hover-bg); }
+        .login-container { 
+            width: 100%; 
+            max-width: 400px; 
+            padding: 30px; 
+            background-color: var(--section-bg);
+            border: 1px dashed var(--border-color);
+        }
+        .remember-me { display: flex; align-items: center; margin-bottom: 15px; font-size: 0.9em; }
+        /* Flash Messages */
+        .flash-error, .flash-success {
+             padding: 15px; margin-bottom: 20px; border: 1px solid; font-weight: bold; width: 100%; box-sizing: border-box;
+         }
+        .flash-error { color: var(--flash-error-text); background-color: var(--flash-error-bg); border-color: var(--flash-error-border); }
+        .flash-success { color: var(--flash-success-text); background-color: var(--flash-success-bg); border-color: var(--flash-success-border); }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>&gt; Login Required</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash-{{ category }}">[!] {{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    
+        <form method="post">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+             <div class="form-group remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember" style="margin-bottom: 0; display: inline;">Remember Me</label>
+            </div>
+            <button type="submit">Login &gt;</button>
+        </form>
+    </div>
+</body>
+</html> 
